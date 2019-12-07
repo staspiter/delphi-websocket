@@ -1,0 +1,9 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2019/12/07 01:03:07.000.538,=\\vmware-host\Shared Folders\Documents\Embarcadero\Studio\Projects\Unit1.pas</Transaction>
+    <Transaction>2019/12/07 01:56:31.320,Z:\Documents\projects\WebSocketDemo\WebSocketDemo.dproj=\\vmware-host\Shared Folders\Documents\Embarcadero\Studio\Projects\Project1.dproj</Transaction>
+    <Transaction>2019/12/07 01:59:12.007,=Z:\Documents\projects\WebSocketDemo\Unit1.pas</Transaction>
+    <Transaction>2019/12/07 01:59:28.933,Z:\Documents\projects\WebSocketDemo\WebSocketServer.pas=Z:\Documents\projects\WebSocketDemo\Unit1.pas</Transaction>
+  </Transactions>
+</BorlandProject>
