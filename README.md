@@ -1,3 +1,3 @@
 # WebSocket Demo
 
-Demo project made specially created for CodeRage 2019
+Demo project specially made for CodeRage 2019
