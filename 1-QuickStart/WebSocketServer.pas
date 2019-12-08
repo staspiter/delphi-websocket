@@ -3,7 +3,7 @@ unit WebSocketServer;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Generics.Collections,
+  System.SysUtils, System.Generics.Collections,
 
   IdCustomTCPServer, IdTCPConnection, IdContext, IdIOHandler, IdGlobal, IdCoderMIME, IdHashSHA,
   IdSSL, IdSSLOpenSSL;
@@ -116,6 +116,7 @@ begin
 
     if not c.InputBufferIsEmpty then
     begin
+      // Read string and parse HTTP headers
       c.InputBuffer.ExtractToBytes(TIdBytes(Bytes));
       msg := IndyTextEncoding_UTF8.GetString(TIdBytes(Bytes));
       ParsedHeaders := HeadersParse(msg);
