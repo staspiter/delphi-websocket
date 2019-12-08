@@ -1,6 +1,0 @@
-[submodule "lib/ArrayHelper"]
-	path = lib/ArrayHelper
-	url = https://github.com/WilliCommer/ArrayHelper.git
-[submodule "lib/JsonDataObjects"]
-	path = lib/JsonDataObjects
-	url = https://github.com/ahausladen/JsonDataObjects.git
