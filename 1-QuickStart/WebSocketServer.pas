@@ -39,6 +39,22 @@ type
 
 implementation
 
+function HeadersParse(const msg: string): TDictionary<string, string>;
+var
+  lines: TArray<string>;
+  line: string;
+  SplittedLine: TArray<string>;
+begin
+  result := TDictionary<string, string>.Create;
+  lines := msg.Split([#13#10]);
+  for line in lines do
+  begin
+    SplittedLine := line.Split([': ']);
+    if Length(SplittedLine) > 1 then
+      result.AddOrSetValue(Trim(SplittedLine[0]), Trim(SplittedLine[1]));
+  end;
+end;
+
 { TWebSocketServer }
 
 constructor TWebSocketServer.Create;
@@ -76,7 +92,7 @@ begin
   if AContext.Connection.IOHandler is TIdSSLIOHandlerSocketBase then
     TIdSSLIOHandlerSocketBase(AContext.Connection.IOHandler).PassThrough := false;
 
-  // Mark connection as invalid during it's not handshaked
+  // Mark connection as "not handshaked"
   AContext.Connection.IOHandler.Tag := -1;
 
   inherited;
@@ -84,60 +100,51 @@ end;
 
 function TWebSocketServer.DoExecute(AContext: TIdContext): Boolean;
 var
-  h: TIdIOHandler;
+  c: TIdIOHandler;
   Bytes: TArray<byte>;
-  s: string;
-  arr: TArray<string>;
-  SecWebSocketKeyLine: integer;
-  Hash: string;
-
-  // under ARC, convert a weak reference to a strong reference before working with it
+  msg, SecWebSocketKey, Hash: string;
+  ParsedHeaders: TDictionary<string, string>;
   LConn: TIdTCPConnection;
 begin
-  h := AContext.Connection.IOHandler;
+  c := AContext.Connection.IOHandler;
 
-  // Handshake reading
+  // Handshake
 
-  if h.Tag = -1 then
+  if c.Tag = -1 then
   begin
-    Bytes := nil;
+    c.CheckForDataOnSource(10);
 
-    h.CheckForDataOnSource(10);
-    if not h.InputBufferIsEmpty then
+    if not c.InputBufferIsEmpty then
     begin
-      h.InputBuffer.ExtractToBytes(TIdBytes(Bytes));
-      s := IndyTextEncoding_UTF8.GetString(TIdBytes(Bytes));
-      arr := s.Split([#13#10]);
+      c.InputBuffer.ExtractToBytes(TIdBytes(Bytes));
+      msg := IndyTextEncoding_UTF8.GetString(TIdBytes(Bytes));
+      ParsedHeaders := HeadersParse(msg);
 
-      if TArrayHelper.Contains<string>(arr, 'Upgrade: websocket') then
+      if ParsedHeaders.ContainsKey('Upgrade') and (ParsedHeaders['Upgrade'] = 'websocket') and
+        ParsedHeaders.ContainsKey('Sec-WebSocket-Key') then
       begin
         // Handle handshake request
         // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
 
-        SecWebSocketKeyLine := TArrayHelper.Find<string>(arr,
-          function(s: string): boolean
-          begin
-            result := s.StartsWith('Sec-WebSocket-Key:');
-          end);
+        SecWebSocketKey := ParsedHeaders['Sec-WebSocket-Key'];
 
-        if SecWebSocketKeyLine > -1 then
-        begin
-          // Send handshake response
-          Hash := TIdEncoderMIME.EncodeBytes(HashSHA1.HashString(Trim(arr[SecWebSocketKeyLine].Split([': '])[1]) +
-            '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'));
-          h.Write('HTTP/1.1 101 Switching Protocols'#13#10
-            + 'Upgrade: websocket'#13#10
-            + 'Connection: Upgrade'#13#10
-            + 'Sec-WebSocket-Accept: '+ Hash
-            + #13#10#13#10, IndyTextEncoding_UTF8);
+        // Send handshake response
+        Hash := TIdEncoderMIME.EncodeBytes(
+          HashSHA1.HashString(SecWebSocketKey + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'));
 
-          // Mark connection as handshaked WebSocket connection
-          h.Tag := 1;
-        end;
+        c.Write('HTTP/1.1 101 Switching Protocols'#13#10
+          + 'Upgrade: websocket'#13#10
+          + 'Connection: Upgrade'#13#10
+          + 'Sec-WebSocket-Accept: ' + Hash
+          + #13#10#13#10, IndyTextEncoding_UTF8);
+
+        // Mark IOHandler as handshaked
+        c.Tag := 1;
       end;
+
+      ParsedHeaders.DisposeOf;
     end;
 
-    // Handle some things, that parent DoExecute have to
     result := false;
     if AContext <> nil then
     begin
@@ -148,7 +155,7 @@ begin
 
   end
   else
-    // After handshaking we can work in default way
+    // After the handshake we can work with the context in common way
     result := inherited;
 end;
 
@@ -184,7 +191,6 @@ begin
     end;
     Mask[0] := ReadByte; Mask[1] := ReadByte; Mask[2] := ReadByte; Mask[3] := ReadByte;
 
-    // TODO: Bad fix
     if DecodedSize < 1 then
     begin
       result := [];
