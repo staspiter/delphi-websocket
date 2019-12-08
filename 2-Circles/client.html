@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>WebSocket Circles</title>
+
+	<script
+	  src="https://code.jquery.com/jquery-3.4.1.min.js"
+	  integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo="
+	  crossorigin="anonymous"></script>
+
+	<script
+	  src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"
+	  integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU="
+	  crossorigin="anonymous"></script>
+
+  	<style>
+  		html, body, #playground, #background {
+    		padding: 0px;
+  			margin: 0px;
+  			width: 100%;
+  			height: 100%;
+  		}
+  		.circle {
+  			width: 60px;
+  			height: 60px;
+  			border-radius: 50%;
+  			background-color: gray;
+  			position: absolute;
+  			transition: all 0.2s;
+  			margin-left: -30px;
+  			margin-top: -30px;
+  		}
+  		.circle.ui-draggable-dragging {
+  			transition: none;
+  		}
+  	</style>
+</head>
+
+<body oncontextmenu="return false;">
+
+	<div id="playground">
+		<div id="background"></div>
+	</div>
+
+	<script>
+		var currentMousePos = { x: -1, y: -1 };
+
+		const socket = new WebSocket('ws://localhost:8080');
+
+		socket.addEventListener('open', function (event) {
+		    console.log('Connected');
+		});
+
+		socket.addEventListener('message', function (event) {
+		    var circlesJson = JSON.parse(event.data);
+
+		    for (var i = 0; i < circlesJson.length; i++) {
+		    	var c = circlesJson[i];
+
+		    	if ($('#' + c.id).toArray().length == 0) {
+		    		$("#playground").append(`<div class="circle" id="${c.id}" style="left: ${c.x}px; top: ${c.y}px; background-color: ${c.color}"></div>`);
+		    		var o = $('#' + c.id);
+		    		o.draggable({
+		    			drag: function(){
+							socket.send(JSON.stringify({
+								act: 'move',
+								id: $(this).attr('id'),
+								x: $(this).css('left').replace('px', ''),
+								y: $(this).css('top').replace('px', '')
+							}));		    				
+		    			}
+		    		});
+					o.mousedown(function(event) {
+						if (event.which == 3) {
+							socket.send(JSON.stringify({
+								act: 'changecolor',
+								id: $(this).attr('id')
+							}));						
+						}
+					});
+		    	}
+
+		    	var o = $('#' + c.id);
+		    	
+		    	if (!o.hasClass('ui-draggable-dragging'))
+			    	o.css({
+			    		"left": c.x + 'px',
+			    		"top": c.y + 'px',
+			    		"background-color": c.color
+			    	});
+
+		    }
+		});
+
+		$('#background').click(function(){
+			socket.send(JSON.stringify({
+				act: 'create',
+				x: currentMousePos.x,
+				y: currentMousePos.y,
+				color: 'gray'
+			}));
+		});
+
+		jQuery(function($) {
+		    $(document).mousemove(function(event) {
+		        currentMousePos.x = event.pageX;
+		        currentMousePos.y = event.pageY;
+		    });
+		});
+	</script>
+
+</body>
+
+</html>

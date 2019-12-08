@@ -25,9 +25,6 @@ type
     destructor Destroy; override;
   end;
 
-var
-  srv: TWebSocketServer;
-
 { TWebSocketDemo }
 
 constructor TWebSocketDemo.Create;
