@@ -119,19 +119,20 @@ var
 begin
   while FSendCirclesThreadWorking do
   begin
-    if not Assigned(FServer.Contexts) then
-      exit;
+    if Assigned(FServer.Contexts) then
+    begin
+      Json := TCircle.SerializeAllCircles;
+      JsonStr := Json.ToJSON;
+      Json.DisposeOf;
 
-    Json := TCircle.SerializeAllCircles;
-    JsonStr := Json.ToJSON;
-    Json.DisposeOf;
-
-    Clients := FServer.Contexts.LockList;
-    try
-      for i := 0 to Clients.Count - 1 do
-        TWebSocketIOHandlerHelper(TIdContext(Clients[i]).Connection.IOHandler).WriteString(JsonStr);
-    finally
-      FServer.Contexts.UnlockList;
+      Clients := FServer.Contexts.LockList;
+      try
+        for i := 0 to Clients.Count - 1 do
+          if TIdContext(Clients[i]).Connection.Connected then
+            TWebSocketIOHandlerHelper(TIdContext(Clients[i]).Connection.IOHandler).WriteString(JsonStr);
+      finally
+        FServer.Contexts.UnlockList;
+      end;
     end;
 
     sleep(100);

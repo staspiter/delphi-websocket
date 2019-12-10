@@ -104,7 +104,6 @@ var
   Bytes: TArray<byte>;
   msg, SecWebSocketKey, Hash: string;
   ParsedHeaders: TDictionary<string, string>;
-  LConn: TIdTCPConnection;
 begin
   c := AContext.Connection.IOHandler;
 
@@ -117,8 +116,12 @@ begin
     if not c.InputBufferIsEmpty then
     begin
       // Read string and parse HTTP headers
-      c.InputBuffer.ExtractToBytes(TIdBytes(Bytes));
-      msg := IndyTextEncoding_UTF8.GetString(TIdBytes(Bytes));
+      try
+        c.InputBuffer.ExtractToBytes(TIdBytes(Bytes));
+        msg := IndyTextEncoding_UTF8.GetString(TIdBytes(Bytes));
+      except
+      end;
+
       ParsedHeaders := HeadersParse(msg);
 
       if ParsedHeaders.ContainsKey('Upgrade') and (ParsedHeaders['Upgrade'] = 'websocket') and
@@ -133,11 +136,14 @@ begin
         Hash := TIdEncoderMIME.EncodeBytes(
           HashSHA1.HashString(SecWebSocketKey + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'));
 
-        c.Write('HTTP/1.1 101 Switching Protocols'#13#10
-          + 'Upgrade: websocket'#13#10
-          + 'Connection: Upgrade'#13#10
-          + 'Sec-WebSocket-Accept: ' + Hash
-          + #13#10#13#10, IndyTextEncoding_UTF8);
+        try
+          c.Write('HTTP/1.1 101 Switching Protocols'#13#10
+            + 'Upgrade: websocket'#13#10
+            + 'Connection: Upgrade'#13#10
+            + 'Sec-WebSocket-Accept: ' + Hash
+            + #13#10#13#10, IndyTextEncoding_UTF8);
+        except
+        end;
 
         // Mark IOHandler as handshaked
         c.Tag := 1;
@@ -145,19 +151,9 @@ begin
 
       ParsedHeaders.DisposeOf;
     end;
+  end;
 
-    result := false;
-    if AContext <> nil then
-    begin
-      LConn := AContext.Connection;
-      if LConn <> nil then
-        Result := LConn.Connected;
-    end;
-
-  end
-  else
-    // After the handshake we can work with the context in common way
-    result := inherited;
+  Result := inherited;
 end;
 
 { TWebSocketIOHandlerHelper }
@@ -171,37 +167,40 @@ var
 begin
   // https://stackoverflow.com/questions/8125507/how-can-i-send-and-receive-websocket-messages-on-the-server-side
 
-  if ReadByte = $81 then
-  begin
-    l := ReadByte;
-    case l of
-      $FE:
-        begin
-          b[1] := ReadByte; b[0] := ReadByte;
-          b[2] := 0; b[3] := 0; b[4] := 0; b[5] := 0; b[6] := 0; b[7] := 0;
-          DecodedSize := Int64(b);
-        end;
-      $FF:
-        begin
-          b[7] := ReadByte; b[6] := ReadByte; b[5] := ReadByte; b[4] := ReadByte;
-          b[3] := ReadByte; b[2] := ReadByte; b[1] := ReadByte; b[0] := ReadByte;
-          DecodedSize := Int64(b);
-        end;
-      else
-        DecodedSize := l - 128;
-    end;
-    Mask[0] := ReadByte; Mask[1] := ReadByte; Mask[2] := ReadByte; Mask[3] := ReadByte;
-
-    if DecodedSize < 1 then
+  try
+    if ReadByte = $81 then
     begin
-      result := [];
-      exit;
-    end;
+      l := ReadByte;
+      case l of
+        $FE:
+          begin
+            b[1] := ReadByte; b[0] := ReadByte;
+            b[2] := 0; b[3] := 0; b[4] := 0; b[5] := 0; b[6] := 0; b[7] := 0;
+            DecodedSize := Int64(b);
+          end;
+        $FF:
+          begin
+            b[7] := ReadByte; b[6] := ReadByte; b[5] := ReadByte; b[4] := ReadByte;
+            b[3] := ReadByte; b[2] := ReadByte; b[1] := ReadByte; b[0] := ReadByte;
+            DecodedSize := Int64(b);
+          end;
+        else
+          DecodedSize := l - 128;
+      end;
+      Mask[0] := ReadByte; Mask[1] := ReadByte; Mask[2] := ReadByte; Mask[3] := ReadByte;
 
-    SetLength(result, DecodedSize);
-    inherited ReadBytes(TIdBytes(result), DecodedSize, False);
-    for i := 0 to DecodedSize - 1 do
-      result[i] := result[i] xor Mask[i mod 4];
+      if DecodedSize < 1 then
+      begin
+        result := [];
+        exit;
+      end;
+
+      SetLength(result, DecodedSize);
+      inherited ReadBytes(TIdBytes(result), DecodedSize, False);
+      for i := 0 to DecodedSize - 1 do
+        result[i] := result[i] xor Mask[i mod 4];
+    end;
+  except
   end;
 end;
 
@@ -210,7 +209,7 @@ var
   Msg: TArray<byte>;
 begin
   // https://stackoverflow.com/questions/8125507/how-can-i-send-and-receive-websocket-messages-on-the-server-side
-
+  
   Msg := [$81];
 
   if Length(RawData) <= 125 then
@@ -224,7 +223,10 @@ begin
 
   Msg := Msg + RawData;
 
-  Write(TIdBytes(Msg), Length(Msg));
+  try
+    Write(TIdBytes(Msg), Length(Msg));
+  except
+  end;
 end;
 
 function TWebSocketIOHandlerHelper.ReadString: string;
