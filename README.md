@@ -1,3 +1,5 @@
 # WebSocket Demo
 
-Demo project specially made for CodeRage 2019
+A demo project made specially for CodeRage 2019
+
+See the video: https://www.youtube.com/watch?v=kg-rWjbKEUc

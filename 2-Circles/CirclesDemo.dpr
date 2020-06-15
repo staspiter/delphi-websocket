@@ -10,7 +10,7 @@ uses
   System.Threading,
   IdContext,
   JsonDataObjects,
-  WebSocketServer in 'WebSocketServer.pas',
+  WebSocketServer,
   Circle in 'Circle.pas';
 
 type

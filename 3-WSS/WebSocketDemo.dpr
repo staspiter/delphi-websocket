@@ -7,6 +7,7 @@ program WebSocketDemo;
 uses
   System.SysUtils,
   IdContext,
+  IdSSLOpenSSL,
   WebSocketServer;
 
 type
@@ -14,6 +15,7 @@ type
   TWebSocketDemo = class
   private
     FServer: TWebSocketServer;
+    FSSLIOHanlder: TIdServerIOHandlerSSLOpenSSL;
 
     procedure Connect(AContext: TIdContext);
     procedure Disconnect(AContext: TIdContext);
@@ -27,11 +29,18 @@ type
 
 constructor TWebSocketDemo.Create;
 begin
+  FSSLIOHanlder := TIdServerIOHandlerSSLOpenSSL.Create;
+  FSSLIOHanlder.SSLOptions.SSLVersions := [sslvTLSv1_2];
+  FSSLIOHanlder.SSLOptions.CertFile := 'cert.crt';
+  FSSLIOHanlder.SSLOptions.KeyFile := 'private.key';
+
   FServer := TWebSocketServer.Create;
+  FServer.InitSSL(FSSLIOHanlder);
   FServer.DefaultPort := 8080;
   FServer.OnExecute := Execute;
   FServer.OnConnect := Connect;
   FServer.OnDisconnect := Disconnect;
+
   FServer.Active := true;
 end;
 
