@@ -31,6 +31,8 @@ constructor TWebSocketDemo.Create;
 begin
   FSSLIOHanlder := TIdServerIOHandlerSSLOpenSSL.Create;
   FSSLIOHanlder.SSLOptions.SSLVersions := [sslvTLSv1_2];
+
+  // Don't forget to put these certificate files next to the executable
   FSSLIOHanlder.SSLOptions.CertFile := 'cert.crt';
   FSSLIOHanlder.SSLOptions.KeyFile := 'private.key';
 

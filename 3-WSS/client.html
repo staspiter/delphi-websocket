@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>WebSocket demo client</title>
+</head>
+
+<body>
+
+	<script>
+		const socket = new WebSocket('wss://yourdomain.com:8080');
+
+		// Connection opened
+		socket.addEventListener('open', function (event) {
+		    socket.send('Hello Server!');
+		});
+
+		// Listen for messages
+		socket.addEventListener('message', function (event) {
+		    console.log('Message from server "' + event.data + '"');
+		});
+	</script>
+
+</body>
+
+</html>
