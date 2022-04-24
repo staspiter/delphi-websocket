@@ -3,12 +3,13 @@ unit WebSocketServer;
 interface
 
 uses
-  System.SysUtils, System.Generics.Collections, System.Classes,
+  System.SysUtils, System.Generics.Collections,
 
   IdCustomTCPServer, IdTCPConnection, IdContext, IdIOHandler, IdGlobal, IdCoderMIME, IdHashSHA,
   IdSSL, IdSSLOpenSSL;
 
 type
+  TWebSocketServerConnectedEvent = procedure(AContext: TIdContext) of object;
 
   TWebSocketServer = class(TIdCustomTCPServer)
   private
@@ -16,7 +17,7 @@ type
     HashSHA1: TIdHashSHA1;
     FHeaders: TDictionary<string, string>;
     FSecWebSocketKey: string;
-    FOnConnected: TNotifyEvent;
+    FOnConnected: TWebSocketServerConnectedEvent;
 
   protected
     procedure DoConnect(AContext: TIdContext); override;
@@ -32,7 +33,7 @@ type
 
     property Headers: TDictionary<string, string> read FHeaders;
     property SecWebSocketKey: string read FSecWebSocketKey;
-    property OnConnected: TNotifyEvent read FOnConnected write FOnConnected;
+    property OnConnected: TWebSocketServerConnectedEvent read FOnConnected write FOnConnected;
   end;
 
   TWebSocketIOHandlerHelper = class(TIdIOHandler)
@@ -158,7 +159,7 @@ begin
 
         Headers.DisposeOf;
         if Assigned(FOnConnected) then
-          FOnConnected(Self);
+          FOnConnected(AContext);
     end;
   end;
 
