@@ -9,11 +9,15 @@ uses
   IdSSL, IdSSLOpenSSL;
 
 type
+  TWebSocketServerConnectedEvent = procedure(AContext: TIdContext) of object;
 
   TWebSocketServer = class(TIdCustomTCPServer)
   private
     IdServerIOHandlerSSLOpenSSL: TIdServerIOHandlerSSLOpenSSL;
     HashSHA1: TIdHashSHA1;
+    FHeaders: TDictionary<string, string>;
+    FSecWebSocketKey: string;
+    FOnConnected: TWebSocketServerConnectedEvent;
 
   protected
     procedure DoConnect(AContext: TIdContext); override;
@@ -26,6 +30,10 @@ type
 
     constructor Create;
     destructor Destroy; override;
+
+    property Headers: TDictionary<string, string> read FHeaders;
+    property SecWebSocketKey: string read FSecWebSocketKey;
+    property OnConnected: TWebSocketServerConnectedEvent read FOnConnected write FOnConnected;
   end;
 
   TWebSocketIOHandlerHelper = class(TIdIOHandler)
@@ -102,8 +110,8 @@ function TWebSocketServer.DoExecute(AContext: TIdContext): Boolean;
 var
   c: TIdIOHandler;
   Bytes: TArray<byte>;
-  msg, SecWebSocketKey, Hash: string;
-  ParsedHeaders: TDictionary<string, string>;
+  msg, Hash: string;
+//  ParsedHeaders: TDictionary<string, string>;
 begin
   c := AContext.Connection.IOHandler;
 
@@ -122,15 +130,15 @@ begin
       except
       end;
 
-      ParsedHeaders := HeadersParse(msg);
+      FHeaders := HeadersParse(msg);
 
-      if ParsedHeaders.ContainsKey('Upgrade') and (ParsedHeaders['Upgrade'] = 'websocket') and
-        ParsedHeaders.ContainsKey('Sec-WebSocket-Key') then
+      if FHeaders.ContainsKey('Upgrade') and (FHeaders['Upgrade'] = 'websocket') and
+        FHeaders.ContainsKey('Sec-WebSocket-Key') then
       begin
         // Handle handshake request
         // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
 
-        SecWebSocketKey := ParsedHeaders['Sec-WebSocket-Key'];
+        FSecWebSocketKey := FHeaders['Sec-WebSocket-Key'];
 
         // Send handshake response
         Hash := TIdEncoderMIME.EncodeBytes(
@@ -149,7 +157,9 @@ begin
         c.Tag := 1;
       end;
 
-      ParsedHeaders.DisposeOf;
+        Headers.DisposeOf;
+        if Assigned(FOnConnected) then
+          FOnConnected(AContext);
     end;
   end;
 
