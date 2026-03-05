@@ -30,7 +30,7 @@ type
 
   TWebSocketIOHandlerHelper = class(TIdIOHandler)
   public
-    function ReadBytes: TArray<byte>;
+    function ReadBytes: TArray<byte>; reintroduce;
     function ReadString: string;
 
     procedure WriteBytes(RawData: TArray<byte>);
