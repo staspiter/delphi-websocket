@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Delphi WebSocket - HTTP + WebSocket demo</title>
+</head>
+<body>
+  <h3>This page was served by the Delphi WebSocket server itself</h3>
+  <input id="text" value="Hello" />
+  <button onclick="ws.send(document.getElementById('text').value)">Send</button>
+  <pre id="log"></pre>
+  <script>
+    var ws = new WebSocket('ws://' + location.host + '/');
+    ws.onopen = function() { log('websocket connected'); };
+    ws.onclose = function() { log('websocket closed'); };
+    ws.onmessage = function(e) { log('received: ' + e.data); };
+    function log(s) { document.getElementById('log').textContent += s + '\n'; }
+  </script>
+</body>
+</html>

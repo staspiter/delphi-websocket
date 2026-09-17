@@ -8,12 +8,26 @@ uses
   IdCustomTCPServer, IdTCPConnection, IdContext, IdIOHandler, IdGlobal, IdCoderMIME, IdHashSHA,
   IdSSL, IdSSLOpenSSL;
 
+const
+  DefaultHandshakeTimeout = 10000;
+
 type
+
+  // Context that remembers when the connection was accepted, so that clients
+  // which never perform the handshake can be dropped instead of occupying
+  // a thread forever
+  TWebSocketContext = class(TIdServerContext)
+  private
+    FConnectedAt: TIdTicks;
+  public
+    property ConnectedAt: TIdTicks read FConnectedAt;
+  end;
 
   TWebSocketServer = class(TIdCustomTCPServer)
   private
     IdServerIOHandlerSSLOpenSSL: TIdServerIOHandlerSSLOpenSSL;
     HashSHA1: TIdHashSHA1;
+    FHandshakeTimeout: integer;
 
   protected
     procedure DoConnect(AContext: TIdContext); override;
@@ -24,13 +38,22 @@ type
 
     property OnExecute;
 
+    // How long (in milliseconds) a connection may stay open without completing
+    // the WebSocket handshake before it is disconnected. Data received from such
+    // a connection is left in the IOHandler's InputBuffer, so that OnExecute can
+    // handle it (a plain HTTP request, for example) - remember to disconnect the
+    // connection yourself once you are done with it, otherwise its thread lives
+    // until this timeout expires. Set to 0 to disable the timeout.
+    property HandshakeTimeout: integer read FHandshakeTimeout write FHandshakeTimeout
+      default DefaultHandshakeTimeout;
+
     constructor Create;
     destructor Destroy; override;
   end;
 
   TWebSocketIOHandlerHelper = class(TIdIOHandler)
   public
-    function ReadBytes: TArray<byte>;
+    function ReadBytes: TArray<byte>; reintroduce;
     function ReadString: string;
 
     procedure WriteBytes(RawData: TArray<byte>);
@@ -63,6 +86,8 @@ begin
 
   HashSHA1 := TIdHashSHA1.Create;
   IdServerIOHandlerSSLOpenSSL := nil;
+  FHandshakeTimeout := DefaultHandshakeTimeout;
+  ContextClass := TWebSocketContext;
 end;
 
 destructor TWebSocketServer.Destroy;
@@ -95,6 +120,9 @@ begin
   // Mark connection as "not handshaked"
   AContext.Connection.IOHandler.Tag := -1;
 
+  if AContext is TWebSocketContext then
+    TWebSocketContext(AContext).FConnectedAt := Ticks64;
+
   inherited;
 end;
 
@@ -104,6 +132,7 @@ var
   Bytes: TArray<byte>;
   msg, SecWebSocketKey, Hash: string;
   ParsedHeaders: TDictionary<string, string>;
+  Handshaked: boolean;
 begin
   c := AContext.Connection.IOHandler;
 
@@ -111,11 +140,15 @@ begin
 
   if c.Tag = -1 then
   begin
+    Handshaked := false;
+
     c.CheckForDataOnSource(10);
 
     if not c.InputBufferIsEmpty then
     begin
       // Read string and parse HTTP headers
+      Bytes := nil;
+      msg := '';
       try
         c.InputBuffer.ExtractToBytes(TIdBytes(Bytes));
         msg := IndyTextEncoding_UTF8.GetString(TIdBytes(Bytes));
@@ -123,33 +156,51 @@ begin
       end;
 
       ParsedHeaders := HeadersParse(msg);
+      try
+        if ParsedHeaders.ContainsKey('Upgrade') and SameText(ParsedHeaders['Upgrade'], 'websocket') and
+          ParsedHeaders.ContainsKey('Sec-WebSocket-Key') then
+        begin
+          // Handle handshake request
+          // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
 
-      if ParsedHeaders.ContainsKey('Upgrade') and (ParsedHeaders['Upgrade'] = 'websocket') and
-        ParsedHeaders.ContainsKey('Sec-WebSocket-Key') then
-      begin
-        // Handle handshake request
-        // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
+          SecWebSocketKey := ParsedHeaders['Sec-WebSocket-Key'];
 
-        SecWebSocketKey := ParsedHeaders['Sec-WebSocket-Key'];
+          // Send handshake response
+          Hash := TIdEncoderMIME.EncodeBytes(
+            HashSHA1.HashString(SecWebSocketKey + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'));
 
-        // Send handshake response
-        Hash := TIdEncoderMIME.EncodeBytes(
-          HashSHA1.HashString(SecWebSocketKey + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'));
+          try
+            c.Write('HTTP/1.1 101 Switching Protocols'#13#10
+              + 'Upgrade: websocket'#13#10
+              + 'Connection: Upgrade'#13#10
+              + 'Sec-WebSocket-Accept: ' + Hash
+              + #13#10#13#10, IndyTextEncoding_UTF8);
+          except
+          end;
 
-        try
-          c.Write('HTTP/1.1 101 Switching Protocols'#13#10
-            + 'Upgrade: websocket'#13#10
-            + 'Connection: Upgrade'#13#10
-            + 'Sec-WebSocket-Accept: ' + Hash
-            + #13#10#13#10, IndyTextEncoding_UTF8);
-        except
+          // Mark IOHandler as handshaked
+          c.Tag := 1;
+          Handshaked := true;
         end;
-
-        // Mark IOHandler as handshaked
-        c.Tag := 1;
+      finally
+        ParsedHeaders.DisposeOf;
       end;
 
-      ParsedHeaders.DisposeOf;
+      // This is not a handshake request (a plain HTTP request, or an incomplete
+      // one). Put the data back so that OnExecute can handle it, or so that the
+      // rest of the handshake request can be appended to it on the next run.
+      if not Handshaked then
+        c.InputBuffer.Write(TIdBytes(Bytes));
+    end;
+
+    // Drop connections that never complete the handshake, otherwise they keep
+    // an Indy thread busy until the peer disconnects - which it may never do
+    if (not Handshaked) and (FHandshakeTimeout > 0) and (AContext is TWebSocketContext) and
+      (GetTickDiff64(TWebSocketContext(AContext).ConnectedAt, Ticks64) > TIdTicks(FHandshakeTimeout)) then
+    begin
+      AContext.Connection.Disconnect;
+      Result := false;
+      exit;
     end;
   end;
 
